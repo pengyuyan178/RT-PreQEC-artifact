@@ -1,0 +1,28 @@
+{
+  "selected_ai_risk_threshold": 0.25,
+  "selected_ai_confidence_threshold": 0.0,
+  "objective": {
+    "type": "minimize_fnr_under_fast_rate",
+    "max_false_negative_rate": 0.05,
+    "min_fast_selection_rate": 0.2
+  },
+  "val_metrics": {
+    "risk_threshold": 0.25,
+    "confidence_threshold": 0.0,
+    "risk_accuracy": 0.4025,
+    "precision": 0.24358974358974358,
+    "recall": 0.9620253164556962,
+    "false_negative_rate": 0.0379746835443038,
+    "false_positive_rate": 0.735202492211838,
+    "f1": 0.3887468030690537,
+    "expected_fast_selection_rate": 0.22,
+    "expected_accurate_selection_rate": 0.78,
+    "expected_oracle_gap": 0.0075
+  },
+  "split": "val",
+  "data": "data/processed/risk_dataset_v2_smoke.npz",
+  "checkpoint": "checkpoints/risk_lstm_v2_smoke_30.pt",
+  "split_policy": "stream_block",
+  "num_val_samples": 400,
+  "sweep_csv": "checkpoints/risk_lstm_v2_smoke_30_calibration.sweep.csv"
+}

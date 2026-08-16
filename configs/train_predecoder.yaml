@@ -1,0 +1,58 @@
+seed: 42
+device: cpu
+output_dir: results/runs/train_predecoder
+log_level: INFO
+
+qec:
+  code: rotated_surface_code
+  basis: memory_x
+  distances: [3]
+  rounds: 3
+  physical_error_rates: [0.001]
+  noise_model: circuit_level_depolarizing
+  num_shots: 32
+
+predecoder:
+  patch_size: 5
+  temporal_window: 3
+  correction_threshold: 0.90
+  confidence_threshold: 0.90
+  risk_threshold: 0.10
+  max_cluster_size: 6
+  min_boundary_distance: 2
+  enable_validation: true
+  enable_abstention: true
+
+model:
+  type: tiny_cnn
+  hidden_channels: 32
+  num_layers: 3
+  dropout: 0.0
+  quantized: false
+
+training:
+  batch_size: 512
+  epochs: 20
+  lr: 0.001
+  weight_decay: 0.0
+  num_workers: 0
+
+runtime:
+  round_period_us: 1.0
+  decode_deadline_us: 10.0
+  max_pauli_frame_lag: 8
+  logical_boundary_interval: 10
+  num_workers: 1
+  overload_backlog_threshold: 16
+
+scheduler:
+  policy: risk_aware_edf
+  alpha_urgency: 1.0
+  beta_risk: 1.0
+  gamma_runtime: 0.5
+  delta_boundary: 2.0
+
+decoders:
+  fast: lookup
+  accurate: pymatching
+  fallback: pymatching

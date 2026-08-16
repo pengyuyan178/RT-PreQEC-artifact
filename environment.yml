@@ -1,0 +1,26 @@
+name: rt-preqec
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python>=3.10
+  - numpy
+  - scipy
+  - pandas
+  - pyyaml
+  - tqdm
+  - typer
+  - rich
+  - matplotlib
+  - scikit-learn
+  - pytorch
+  - pip
+  - pip:
+      - stim
+      - sinter
+      - pymatching
+      - pytest
+      - pytest-cov
+      - ruff
+      - black
+      - mypy

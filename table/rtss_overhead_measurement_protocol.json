@@ -1,0 +1,28 @@
+{
+  "config": "configs/real_stream_eval_main.yaml",
+  "num_shots_requested": 2000,
+  "warmup_shots": 100,
+  "num_measured_shots": 1900,
+  "pin_cpu": null,
+  "cpu_pinned": false,
+  "thread_env": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1"
+  },
+  "platform": {
+    "system": "Windows",
+    "release": "10",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 186 Stepping 2, GenuineIntel",
+    "python": "3.10.20"
+  },
+  "timing_mode": "loop_per_shot",
+  "real_qec": true,
+  "hard_runtime_label_valid": true,
+  "notes": [
+    "frontend/validation/scheduler columns are isolated Python microbenchmarks",
+    "backend columns are empirical per-record decoder timing labels"
+  ]
+}

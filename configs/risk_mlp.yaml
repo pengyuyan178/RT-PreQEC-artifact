@@ -1,0 +1,35 @@
+seed: 42
+device: cpu
+output_dir: results/runs
+log_level: INFO
+
+model:
+  type: risk_mlp
+  hidden_dim: 64
+  feature_layers: 2
+  history_encoder_type: none
+  history_length: 1
+  dropout: 0.0
+  use_layer_norm: true
+
+training:
+  batch_size: 256
+  epochs: 10
+  lr: 0.001
+  weight_decay: 0.0
+  weighted_sampler: true
+  grad_clip_norm: 1.0
+  num_workers: 0
+
+risk_dataset:
+  split_policy: stream_block
+
+timing:
+  set_torch_num_threads: 1
+  set_numpy_num_threads: 1
+
+loss:
+  risk_weight: 1.0
+  hard_runtime_weight: 0.5
+  runtime_weight: 0.2
+  confidence_weight: 0.1

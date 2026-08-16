@@ -1,0 +1,21 @@
+{
+  "policy": "commit_frontier_guard_q95",
+  "dispatch_policy": "earliest_uncommitted_ready_job",
+  "runtime_guard": {
+    "quantile": 0.95,
+    "accurate_margin_us": 7.432298700084782,
+    "fast_margin_us": 0.0,
+    "accurate_coverage": 0.9505,
+    "fast_coverage": 0.9935,
+    "num_calibration_jobs": 2000,
+    "quantile_method": "higher"
+  },
+  "workers": [1, 2, 3, 4, 5, 6],
+  "validation_records": "results/runs/paper_suite_d7_rtqec_ai_decoupled_smoke/_threshold_val_records/records.csv",
+  "validation_records_sha256": "82f5d4f3431f5e3d376e308cbed9c331b7a9adc9b81a48d70cffb233aead708f",
+  "checkpoint": "checkpoints/risk_lstm_v2_smoke_30.pt",
+  "checkpoint_sha256": "5a48cf50afb0a8c44cef362498eb9bf17d9e88e116c2d648312647bc090751c3",
+  "test_outcomes_used_to_select_guard_quantile": false,
+  "logical_error_used_to_select_worker_count": false,
+  "_note": "Margins were calibrated once on the exploratory split named in validation_records and are pinned here so the confirmation runs cannot retune them. scripts/run_dispatch_sweep.py --locked-policy verifies checkpoint_sha256 before replaying these margins."
+}

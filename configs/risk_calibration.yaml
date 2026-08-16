@@ -1,0 +1,9 @@
+seed: 42
+device: cpu
+output_dir: results/runs/risk_calibration
+log_level: INFO
+
+objective:
+  type: minimize_fnr_under_fast_rate
+  max_false_negative_rate: 0.05
+  min_fast_selection_rate: 0.2

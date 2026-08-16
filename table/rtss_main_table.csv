@@ -1,0 +1,7 @@
+mode,display_mode,logical_error_rate,p99_response_time_us,p999_response_time_us,deadline_miss_ratio,p99_pauli_frame_lag,pauli_frame_lag_violation_ratio,boundary_commit_success_rate,fast_selection_rate,accurate_selection_rate,accept_rate,abstention_rate,false_accept_rate,accepted_error_rate,validation_pass_rate,predecode_accept_rate,mean_estimated_residual_reduction
+accurate_only,Accurate-only,0.00025,435.4090015792845,520.3059992370645,0.2315,28.0,0.1475,0.8095238095238095,0.0,1.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0
+fast_only,Fast-only,0.1815,4.799999237060547,20.500403816223407,0.0,0.0,0.0,1.0,1.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0
+edf,EDF,0.008,46.79999168395996,47.89999771499634,0.0005,5.0,0.01125,1.0,0.04225,0.95775,0.0,1.0,0.0,0.0,0.0,0.0,0.0
+rt_qec_ai,RT-PreQEC,0.00325,102.40643547417665,146.84263382128623,0.076,8.0,0.03425,0.9523809523809524,0.052,0.948,0.321,0.679,0.1736760124610591,0.1736760124610591,0.1865,0.321,0.0977784858450293
+oracle_predecoder,Oracle front-end,0.00025,13.210902114872496,21.51251756133908,0.0,1.0,0.0,1.0,0.7455,0.2545,1.0,0.0,0.2545,0.2545,1.0,1.0,0.5999999999999998
+oracle_risk,Oracle risk,0.00025,142.9089941024778,233.4008977088934,0.039,10.0,0.02875,0.9761904761904762,0.7455,0.2545,0.0,1.0,0.0,0.0,0.0,0.0,0.0

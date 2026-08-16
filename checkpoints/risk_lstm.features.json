@@ -1,0 +1,28 @@
+{
+  "feature_names": [
+    "syndrome_weight",
+    "syndrome_density",
+    "num_detectors",
+    "has_any_detection",
+    "active_detector_fraction",
+    "layout_present",
+    "num_active_time_bins",
+    "active_time_span",
+    "active_x_span",
+    "active_y_span",
+    "layout_missing_flag",
+    "mean_candidate_count_active",
+    "max_candidate_count_active",
+    "fraction_active_with_candidate",
+    "candidates_missing_flag",
+    "weight_squared",
+    "log1p_weight",
+    "num_patches",
+    "mean_patch_active",
+    "max_patch_active",
+    "mean_patch_size",
+    "max_patch_size",
+    "mean_patch_density",
+    "max_patch_density"
+  ]
+}

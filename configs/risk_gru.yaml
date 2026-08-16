@@ -1,0 +1,29 @@
+seed: 42
+device: cpu
+output_dir: results/runs
+log_level: INFO
+
+model:
+  type: risk_gru
+  hidden_dim: 64
+  history_encoder_type: gru
+  history_length: 8
+  history_hidden_dim: 64
+  num_layers: 1
+  dropout: 0.0
+  use_layer_norm: true
+
+training:
+  batch_size: 256
+  epochs: 10
+  lr: 0.001
+  weight_decay: 0.0
+  weighted_sampler: true
+  grad_clip_norm: 1.0
+  num_workers: 0
+
+loss:
+  risk_weight: 1.0
+  hard_runtime_weight: 0.5
+  runtime_weight: 0.2
+  confidence_weight: 0.1

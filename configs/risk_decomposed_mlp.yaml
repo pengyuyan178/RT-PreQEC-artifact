@@ -1,0 +1,53 @@
+seed: 42
+device: cpu
+output_dir: results/runs/risk_decomposed_mlp
+log_level: INFO
+
+risk_dataset:
+  split_policy: stream_block
+  train_fraction: 0.6
+  val_fraction: 0.2
+  test_fraction: 0.2
+
+training:
+  batch_size: 256
+  epochs: 30
+  lr: 0.001
+  weight_decay: 0.0
+  weighted_sampler: true
+  grad_clip_norm: 1.0
+  num_workers: 0
+  deterministic: false
+
+model:
+  type: risk_decomposed_mlp
+  hidden_dim: 64
+  feature_layers: 2
+  history_encoder_type: none
+  history_length: 1
+  history_hidden_dim: 64
+  num_layers: 1
+  bidirectional: false
+  dropout: 0.0
+  use_layer_norm: true
+  combination_weights:
+    fast_wrong: 1.0
+    fast_logical_fail: 1.0
+    hard_runtime: 0.5
+    syndrome_tail: 0.2
+
+timing:
+  set_torch_num_threads: 1
+  set_numpy_num_threads: 1
+
+runtime:
+  torch_num_threads: 1
+
+loss:
+  fast_wrong: 1.0
+  fast_logical_fail: 1.5
+  hard_runtime: 0.5
+  syndrome_tail: 0.2
+  safe_fast: 1.0
+  runtime: 0.2
+  confidence: 0.1

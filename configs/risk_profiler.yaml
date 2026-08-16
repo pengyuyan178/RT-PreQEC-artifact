@@ -1,0 +1,130 @@
+seed: 42
+device: cpu
+output_dir: results/runs
+log_level: INFO
+
+qec:
+  code: rotated_surface_code
+  basis: memory_x
+  distances: [3]
+  rounds: 3
+  physical_error_rates: [0.001]
+  noise_model: circuit_level_depolarizing
+  num_shots: 5000
+  test_fraction: 0.2
+
+qec_grid:
+  distances: [3, 5]
+  rounds_mode: proportional
+  rounds_multiplier: [1, 3]
+  physical_error_rates: [0.001, 0.003, 0.005, 0.007, 0.01]
+  shots_per_setting: 2000
+  max_settings: 8
+  max_total_shots: 2000
+
+noise_scenarios:
+  - name: circuit_level_depolarizing
+    type: stim_generated
+  - name: measurement_heavy
+    type: stim_generated
+    before_measure_flip_probability_multiplier: 3.0
+  - name: burst_toy
+    type: postprocess_syndrome
+    burst_probability: 0.02
+    burst_length: 3
+    burst_flip_probability: 0.2
+  - name: hotspot_toy
+    type: postprocess_syndrome
+    hotspot_fraction: 0.1
+    hotspot_flip_multiplier: 3.0
+
+predecoder:
+  patch_size: 5
+  temporal_window: 3
+  confidence_threshold: 0.90
+  risk_threshold: 0.15
+  max_cluster_size: 6
+  min_boundary_distance: 2
+  enable_validation: true
+  enable_abstention: true
+
+model:
+  type: tiny_cnn
+  hidden_channels: 16
+  num_layers: 3
+  dropout: 0.0
+  quantized: false
+
+training:
+  batch_size: 16
+  epochs: 2
+  lr: 0.001
+  weight_decay: 0.0
+  num_workers: 0
+
+runtime:
+  round_period_us: 1.0
+  decode_deadline_us: 10.0
+  max_pauli_frame_lag: 8
+  logical_boundary_interval: 10
+  num_workers: 1
+  overload_backlog_threshold: 16
+
+timing:
+  accuracy_decode_mode: batch
+  runtime_label_mode: loop_per_shot
+  warmup_shots: 100
+  repeat_per_shot: 3
+  max_timing_shots: 2000
+  timing_statistic: median
+  use_batch_decode_for_accuracy: true
+  use_loop_timing_for_runtime_label: true
+  set_torch_num_threads: 1
+  set_numpy_num_threads: 1
+
+scheduler:
+  policy: risk_aware_edf
+  alpha_urgency: 1.0
+  beta_risk: 1.2
+  gamma_runtime: 0.4
+  delta_boundary: 1.5
+  use_ai_risk: true
+  ai_risk_threshold: 0.5
+  ai_confidence_threshold: 0.5
+  conservative_on_low_confidence: true
+
+decoders:
+  fast: lookup
+  accurate: pymatching
+  fallback: pymatching
+
+risk_dataset:
+  num_shots: 5000
+  hard_runtime_percentile: 90
+  fast_decoder: lookup
+  accurate_decoder: pymatching
+  feature_mode: syndrome_patch_aggregate
+  split_policy: stream_block
+
+risk_label:
+  combined_definition:
+    - fast_wrong_vs_accurate
+    - fast_logical_fail
+    - hard_runtime
+    - syndrome_weight_tail
+  syndrome_weight_tail_percentile: 90
+  store_component_labels: true
+
+risk_model:
+  type: tiny_mlp
+  hidden_dim: 64
+  num_layers: 2
+  dropout: 0.0
+
+risk_training:
+  batch_size: 256
+  epochs: 10
+  lr: 0.001
+  weight_decay: 0.0
+  val_fraction: 0.2
+  num_workers: 0

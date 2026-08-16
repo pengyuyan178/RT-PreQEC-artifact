@@ -1,0 +1,88 @@
+seed: 42
+device: cpu
+output_dir: results/runs/dispatch_sweep_traces/d7
+log_level: INFO
+
+qec:
+  code: rotated_surface_code
+  basis: memory_x
+  distances: [7]
+  rounds: 7
+  physical_error_rates: [0.003]
+  num_shots: 10000
+  test_fraction: 0.4
+  noise_model: circuit_level_depolarizing
+
+predecoder:
+  patch_size: 5
+  temporal_window: 3
+  confidence_threshold: 0.50
+  risk_threshold: 0.35
+  max_cluster_size: 6
+  min_boundary_distance: 2
+  enable_validation: true
+  enable_abstention: true
+  frontend_latency_us: 0.25
+  validation_latency_us: 0.05
+  max_residual_reduction: 0.60
+  min_backend_latency_fraction: 0.35
+  density_risk_scale: 6.0
+
+runtime:
+  round_period_us: 6.0
+  decode_deadline_us: 48.0
+  max_pauli_frame_lag: 4
+  logical_boundary_interval: 100
+  num_workers: 1
+  overload_backlog_threshold: 8
+
+scheduler:
+  policy: risk_aware_edf
+  alpha_urgency: 1.0
+  beta_risk: 1.2
+  gamma_runtime: 0.5
+  delta_boundary: 2.0
+  use_ai_risk: true
+  ai_risk_threshold: 0.5
+  ai_confidence_threshold: 0.5
+  conservative_on_low_confidence: true
+
+timing:
+  accuracy_decode_mode: batch
+  runtime_label_mode: loop_per_shot
+  warmup_shots: 100
+  repeat_per_shot: 3
+  max_timing_shots: 10000
+  timing_statistic: median
+  use_batch_decode_for_accuracy: true
+  use_loop_timing_for_runtime_label: true
+  set_torch_num_threads: 1
+  set_numpy_num_threads: 1
+
+data_protocol:
+  eval_source: generated
+  train_seed: 42
+  eval_seed: 2003
+  require_eval_seed_different_from_train_seed: true
+
+decoders:
+  fast: lookup
+  accurate: pymatching
+
+risk_eval:
+  modes:
+    - accurate_only
+  hard_runtime_percentile: 90
+  ai_risk_threshold: 0.30
+  ai_confidence_threshold: 0.50
+  conservative_on_low_confidence: true
+  use_same_shots_for_all_modes: true
+  heuristic_predecoder_backend: accurate
+  boundary_drain_rounds: 2
+  rt_qec_drain_backlog_threshold: 4
+
+outputs:
+  save_events: false
+  save_decisions: false
+  save_predictions: false
+  save_plots_ready_csv: false
