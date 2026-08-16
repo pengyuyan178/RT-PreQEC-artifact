@@ -55,8 +55,6 @@ in-text numbers come from them:
 | `rtss_burst_capacity_table.csv` | burst regime at 1–4 workers, for the headroom discussion |
 | `regime_summary_table.csv` | all three regimes x 5 modes, measured |
 | `frontend_contract_table.csv` | front-end accept / abstain / false-accept rates |
-| `rtss_gate_audit.csv` | 30-row phase-gate audit trail (evidence paths per claim) |
-| `dispatch_sweep_d7_reference.csv` | pinned dispatch-sweep reference, consumed by `scripts/verify_reproduction.py` |
 
 `rtss_overhead_measurement_protocol.json` records the conditions behind
 `rtss_overhead_table.csv` — 1 900 shots after 100 warm-up, single thread, no CPU pinning
@@ -155,9 +153,6 @@ Copied on 2026-08-16 from:
 - `table/rtss_overhead_table.csv`, `table/rtss_overhead_measurement_protocol.json`
   ← `../experiment_records/results/runs/wcet_overheads_d7/`
 - all other `table/*.csv` ← `results/tables/` in this repository
-
-`results/tables/_tmp_gate_audit.csv` was deliberately not copied: it is a superseded
-temporary artifact of `rtss_gate_audit.csv`.
 
 The archives remain authoritative; these are reading copies pinned alongside the code.
 Because `.gitignore` blanket-ignores `*.csv` and `*.pdf`, both directories are un-ignored

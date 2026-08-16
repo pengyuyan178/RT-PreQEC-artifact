@@ -36,9 +36,8 @@ published figures, and the data behind every figure and table in the paper.
 8. [Exporting the paper-ready figure PDFs](#8-exporting-the-paper-ready-figure-pdfs)
 9. [Paper reference — figures and tables](#9-paper-reference--figures-and-tables)
 10. [Name mapping and configuration reference](#10-name-mapping-and-configuration-reference)
-11. [Optional: dispatch-order vs. routing study](#11-optional-dispatch-order-vs-routing-study)
-12. [Reproducibility notes and known limitations](#12-reproducibility-notes-and-known-limitations)
-13. [Citing](#13-citing)
+11. [Reproducibility notes and known limitations](#11-reproducibility-notes-and-known-limitations)
+12. [Citing](#12-citing)
 
 ---
 
@@ -166,7 +165,6 @@ python scripts/evaluate_realtime.py --config configs/eval_realtime.yaml      --d
 │   ├── real_stream_eval_scaling.yaml           # scaling regime, d=11
 │   ├── real_stream_eval_burst.yaml             # burst regime, d=7 single worker
 │   ├── real_stream_eval_burst_2w.yaml          # burst regime, d=7 two workers
-│   ├── dispatch_sweep_{d7,d11,burst}.yaml      # trace generators for the dispatch study
 │   └── policies/runtime_guard_q95_d7.json      # pre-registered, hash-pinned runtime guard
 ├── src/rt_preqec/              # the runtime, schedulers, front-end, evaluators
 ├── scripts/                    # the reproduction entry points (see §5–§8)
@@ -211,7 +209,7 @@ retraining or rebuilding:
 This is the **recommended first check**: it rebuilds every experimental figure and
 table from the **committed event-level data** in `table/figure_data/`, with no
 experiment runs. Because the underlying stim sampler is non-deterministic (see
-[§12](#12-reproducibility-notes-and-known-limitations)), this fast path is the only
+[§11](#11-reproducibility-notes-and-known-limitations)), this fast path is the only
 way to reproduce the *exact* published numbers — it is also how the submission's
 PDFs were produced.
 
@@ -291,7 +289,7 @@ python scripts/export_rtss_tables.py \
 ## 6. Reproducing the experiments
 
 This regenerates the run outputs from scratch. Read
-[§12](#12-reproducibility-notes-and-known-limitations) first: **the stim syndrome
+[§11](#11-reproducibility-notes-and-known-limitations) first: **the stim syndrome
 sampler is not seeded, so a fresh run samples a *new* set of shots each time and the
 numbers will differ run-to-run** (especially LER, which is dominated by a handful of
 shots at 4 000 test shots). Use the committed `table/figure_data/` (§5) for the exact
@@ -667,55 +665,7 @@ backend.
 
 ---
 
-## 11. Optional: dispatch-order vs. routing study
-
-A separate continuous-arrival study (used for the rebuttal / extended analysis)
-decouples *which ready job runs next* (dispatch policy) from *which backend it goes
-to* (routing). It lives in `src/rt_preqec/evaluation/` and is independent of §5–§8.
-
-```bash
-# 1. generate the d=7 trace (records.csv) it consumes
-python scripts/evaluate_real_stream.py \
-    --config configs/dispatch_sweep_d7.yaml \
-    --risk-checkpoint checkpoints/risk_lstm_v2_smoke_30.pt \
-    --split test \
-    --out results/runs/dispatch_sweep_traces/d7
-
-# 2. sweep variants x worker counts, replaying the pre-registered locked margins
-python scripts/run_dispatch_sweep.py \
-    --config          configs/dispatch_sweep_d7.yaml \
-    --records         results/runs/dispatch_sweep_traces/d7/records.csv \
-    --risk-checkpoint checkpoints/risk_lstm_v2_smoke_30.pt \
-    --locked-policy   configs/policies/runtime_guard_q95_d7.json \
-    --workers 1,2,3,4,5,6 --regime d7 --eval-seed 2003 \
-    --out             results/runs/dispatch_sweep_d7
-```
-
-**~30 s for 2 workers.** Every run re-derives commits, lag, deadline misses, and
-boundary success from the raw trace and asserts they match (`validate_event_trace`),
-cross-checks a single-worker index-order run against the exact Lindley recurrence,
-and refuses to finish if any integrity check fails — look for `integrity=True` in the
-output. Writes `summary.csv`, `integrity.csv`, `RESULTS.md`, `metadata.json`.
-
-To confirm a machine reproduces the pinned dispatch numbers:
-
-```bash
-python scripts/verify_reproduction.py \
-    --reference       results/tables/dispatch_sweep_d7_reference.csv \
-    --config          configs/dispatch_sweep_d7.yaml \
-    --records         results/runs/dispatch_sweep_traces/d7/records.csv \
-    --risk-checkpoint checkpoints/risk_lstm_v2_smoke_30.pt \
-    --locked-policy   configs/policies/runtime_guard_q95_d7.json \
-    --workers 1,2,3,4,5,6
-```
-
-> This study is the one place where the dispatch decision is the object of interest.
-> A dispatch *policy* must never disable the scheduler — order and routing are
-> orthogonal axes, which is exactly what the study isolates.
-
----
-
-## 12. Reproducibility notes and known limitations
+## 11. Reproducibility notes and known limitations
 
 Read this before treating a fresh §6 run as "the paper numbers."
 
@@ -752,7 +702,7 @@ Read this before treating a fresh §6 run as "the paper numbers."
 
 ---
 
-## 13. Citing
+## 12. Citing
 
 If you use this artifact, please cite the RTSS 2026 submission. The evaluation
 framework, scheduler, front-end, and validation logic are implemented in Python on
