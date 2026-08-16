@@ -267,6 +267,7 @@ data/external/*
 # drop the whole of figure/ and table/ -- see figure/README.md for the mapping
 # from each file to the paper element it feeds.
 !figure/*.pdf
+!figure/*.png
 !table/**/*.csv
 
 # PNG renderings of the paper figures, embedded in README.md so the walkthrough

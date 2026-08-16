@@ -5,6 +5,12 @@ This repository is the reproduction artifact for the RTSS 2026 submission
 It contains the runtime, the evaluation harness, every committed run input, the
 published figures, and the data behind every figure and table in the paper.
 
+> This README mirrors the **current** paper draft (Overleaf revision `58f61e6`):
+> **ten figures** (`figure1.pdf`–`figure9.pdf` plus `t1.png`) and **three tables**
+> (`tab:regimes`, `tab:modes`, `tab:overhead`). The original main-results and
+> ablation-delta tables were replaced by two figures — `t1.png` (`fig:main`, §6)
+> and `figure9.pdf` (`fig:ablation-delta`, §8) — both backed by committed CSVs.
+
 > **TL;DR — the fastest path that works out of the box:**
 >
 > ```bash
@@ -17,10 +23,11 @@ published figures, and the data behind every figure and table in the paper.
 > python scripts/export_rtss_tables.py --run-dir table/figure_data/d7_main --out results/tables/rerun
 > ```
 >
-> The last two commands redraw **figures 3–6** and rebuild **Tables I–II** from the
-> committed event data — **no long experiments required**. Re-running the full
-> experiments from scratch is covered in [§6](#6-reproducing-the-experiments) and
-> takes roughly 30 minutes on a single core.
+> The last two commands redraw the data behind **figures 5–8** and rebuild the
+> CSVs behind **`t1.png` (fig:main) and figure 9** from the committed event data —
+> **no long experiments required**. Re-running the full experiments from scratch
+> is covered in [§6](#6-reproducing-the-experiments) and takes roughly 30 minutes
+> on a single core.
 
 ---
 
@@ -32,7 +39,7 @@ published figures, and the data behind every figure and table in the paper.
 4. [Repository layout](#4-repository-layout)
 5. [Reproducing the figures and tables the fast way](#5-reproducing-the-figures-and-tables-the-fast-way)
 6. [Reproducing the experiments](#6-reproducing-the-experiments)
-7. [Reproducing the component-overhead table](#7-reproducing-the-component-overhead-table-table-iii)
+7. [Reproducing the component-overhead table](#7-reproducing-the-component-overhead-table-taboverhead)
 8. [Exporting the paper-ready figure PDFs](#8-exporting-the-paper-ready-figure-pdfs)
 9. [Paper reference — figures and tables](#9-paper-reference--figures-and-tables)
 10. [Name mapping and configuration reference](#10-name-mapping-and-configuration-reference)
@@ -63,7 +70,25 @@ not the predecoder, which is a known workload-shaping building block.
 | **Fast sel** | Fast-selection ratio — fraction of jobs routed to the fast backend. |
 | **Accept** | Front-end accept rate before validation. |
 
-### The pipeline (paper Figure 2)
+### The real-time QEC control loop (paper Figure 1, `fig:intro-loop`)
+
+Each stabilizer round produces a syndrome that the classical control system must
+decode fast enough to keep the Pauli frame current; a decoding backlog delays
+corrections and degrades subsequent logical operations. RT-PreQEC is the
+real-time layer in that loop.
+
+![Real-time QEC control loop](docs/assets/figure1.png)
+
+### The lag-bounded task model (paper Figure 2, `fig:lag-model`)
+
+Syndrome jobs are released every round period $T$; each has a deadline
+$d_t = a_t + D$. The Pauli-frame lag $L_i$ accumulates while work is backlogged,
+and breaching $L_{\max}$ triggers overload routing toward the boundary's hard
+commit point.
+
+![Lag-bounded task model](docs/assets/figure2.png)
+
+### The RT-PreQEC architecture (paper Figure 3, `fig:architecture`)
 
 Every job flows through the same safety contract. The front-end emits a *weak*
 certificate (residual shaping only) or a *strong* one (eligible for fast commit);
@@ -71,16 +96,15 @@ the lag-aware scheduler routes each job; the validation gate can reject a fast
 commit back onto the accurate backend; and the accurate backend is always the
 fallback. The Pauli frame is only updated at a commit.
 
-![RT-PreQEC architecture and pipeline](docs/assets/figure2.png)
+![RT-PreQEC architecture](docs/assets/figure3.png)
 
-### The lag-bounded task model (paper Figure 1)
+### Priority-signal composition (paper Figure 4, `fig:priority-composition`)
 
-Syndrome jobs are released every round period $T$; each has a deadline
-$d_t = a_t + D$. The Pauli-frame lag $L_i$ accumulates while work is backlogged,
-and breaching $L_{\max}$ triggers overload routing toward the boundary's hard
-commit point.
+Four per-job signals — logical risk $r_t$, boundary urgency $b_t$, Pauli-frame
+age $L_t$, and residual workload $w_t$ — feed the priority function that the
+scheduler maximizes when routing each job.
 
-![Lag-bounded task model](docs/assets/figure1.png)
+![Priority-signal composition](docs/assets/figure4.png)
 
 ---
 
@@ -161,16 +185,16 @@ python scripts/evaluate_realtime.py --config configs/eval_realtime.yaml      --d
 ├── Makefile                    # smoke-path shortcuts only (not the paper pipeline)
 ├── configs/                    # all experiment configs
 │   ├── real_stream_eval_main.yaml              # main regime, d=7 (paper operating point)
-│   ├── real_stream_eval_main_ai_selected.yaml  # d=7 + rt_qec_ai mode (used for the main table)
+│   ├── real_stream_eval_main_ai_selected.yaml  # d=7 + rt_qec_ai mode (used for fig:main)
 │   ├── real_stream_eval_scaling.yaml           # scaling regime, d=11
 │   ├── real_stream_eval_burst.yaml             # burst regime, d=7 single worker
 │   ├── real_stream_eval_burst_2w.yaml          # burst regime, d=7 two workers
 │   └── policies/runtime_guard_q95_d7.json      # pre-registered, hash-pinned runtime guard
 ├── src/rt_preqec/              # the runtime, schedulers, front-end, evaluators
 ├── scripts/                    # the reproduction entry points (see §5–§8)
-├── figure/                     # the paper's six figures as published PDFs
+├── figure/                     # the paper's ten figures as published (9 PDFs + t1.png)
 ├── table/                      # CSV data behind every paper figure and table
-│   └── figure_data/            #   per-mode event traces that regenerate figures 3–6
+│   └── figure_data/            #   per-mode event traces that regenerate figures 5–8
 ├── checkpoints/                # committed trained models (LSTM risk profiler, predecoder)
 ├── data/processed/             # committed 300k-sample predecoder dataset
 ├── results/
@@ -207,11 +231,11 @@ retraining or rebuilding:
 ## 5. Reproducing the figures and tables the fast way
 
 This is the **recommended first check**: it rebuilds every experimental figure and
-table from the **committed event-level data** in `table/figure_data/`, with no
+table CSV from the **committed event-level data** in `table/figure_data/`, with no
 experiment runs. Because the underlying stim sampler is non-deterministic (see
 [§11](#11-reproducibility-notes-and-known-limitations)), this fast path is the only
 way to reproduce the *exact* published numbers — it is also how the submission's
-PDFs were produced.
+data figures were produced.
 
 ### 5.1 Redraw the figures (PNG)
 
@@ -228,18 +252,18 @@ figures:
 
 | Output PNG | Paper figure | Source data |
 |---|---|---|
-| `main_pareto_frontier.png` | **Figure 3** — operating-point comparison | `d7_main/summary_metrics.csv` |
-| `response_time_cdf_by_mode.png` | **Figure 4** — response-time CDF | `d7_main/<mode>/events.csv` |
-| `burst_lag_backlog_trace.png` | **Figure 5** — burst lag & response | `burst/<mode>/events.csv` |
-| `threshold_sweep_lag_frontier.png` | **Figure 6** — decoupled threshold sweep | `threshold_sweep/threshold_sweep.csv` |
+| `main_pareto_frontier.png` | **Figure 5** — main operating-point comparison (`fig:pareto`, §5) | `d7_main/summary_metrics.csv` |
+| `response_time_cdf_by_mode.png` | **Figure 6** — response-time CDF (`fig:cdf`, §5) | `d7_main/<mode>/events.csv` |
+| `burst_lag_backlog_trace.png` | **Figure 7** — burst lag & response (`fig:burst`, §7) | `burst/<mode>/events.csv` |
+| `threshold_sweep_lag_frontier.png` | **Figure 8** — decoupled threshold sweep (`fig:sweep`, §7) | `threshold_sweep/threshold_sweep.csv` |
 
 (`logical_error_rate_vs_pauli_frame_lag_violation.png`,
 `logical_error_rate_vs_p99_response_time.png`, and
 `boundary_commit_success_vs_logical_error.png` are the single-panel variants of
-figure 3's three panels; `lag_model_task_flow.png` and `rt_qec_architecture.png` are
-schematics.)
+figure 5's three panels; `lag_model_task_flow.png` and `rt_qec_architecture.png` are
+rough generator schematics, distinct from the hand-polished figures 1–4 in the paper.)
 
-### 5.2 Rebuild the tables (CSV)
+### 5.2 Rebuild the table CSVs
 
 ```bash
 python scripts/export_rtss_tables.py \
@@ -247,24 +271,29 @@ python scripts/export_rtss_tables.py \
     --out     results/tables/rerun
 ```
 
-This writes five CSVs, of which two are paper tables (compare them to `table/`):
+This writes five CSVs (compare them to `table/`). None of them appears as a LaTeX
+table in the current draft — the paper's former main/ablation tables are now
+**figures** — but two of them are exactly what those figures plot:
 
-| Output CSV | Paper table |
+| Output CSV | Backs |
 |---|---|
-| `rtss_main_table.csv` | **Table I** (`tab:main`, §6) |
-| `rtss_ablation_delta_vs_rt_qec.csv` | **Table II** (`tab:ablation-delta`, §7) |
-| `rtss_main_ablation_table.csv` | Table I superset incl. all 8 ablation modes |
+| `rtss_main_table.csv` | **`t1.png`** — the main-results figure (`fig:main`, §6) |
+| `rtss_ablation_delta_vs_rt_qec.csv` | **Figure 9** — ablation impact vs. RT-PreQEC (`fig:ablation-delta`, §8) |
+| `rtss_main_ablation_table.csv` | `t1.png` superset incl. all 8 ablation modes |
 | `rtss_safety_contract_table.csv` | safety-contract comparison (prose support) |
 | `rtss_ai_risk_table.csv` | learned- vs heuristic-risk comparison (prose support) |
 
 > **Verified on the reference machine.** The five CSVs from §5.2 come out
 > **byte-identical** to `table/rtss_*.csv`. For the figures, the publisher script
-> (§8) reproduces `figure3.pdf` and `figure6.pdf` **byte-for-byte** (16 569 and
-> 13 833 bytes); `figure4.pdf` and `figure5.pdf` differ only by a sub-point canvas
+> (§8) reproduces the submission's main-comparison and threshold-sweep PDFs
+> **byte-for-byte**; the CDF and burst-trace PDFs differ only by a sub-point canvas
 > width introduced by a newer matplotlib, not by the data.
 
-**Table III** (component overheads) is *not* produced here — it is a microbenchmark,
-not a trace product. See [§7](#7-reproducing-the-component-overhead-table-table-iii).
+**`tab:overhead`** (component overheads) is *not* produced here — it is a
+microbenchmark, not a trace product. See
+[§7](#7-reproducing-the-component-overhead-table-taboverhead). The paper's other
+two tables — `tab:regimes` (§3) and `tab:modes` (§5) — are hand-written
+configuration tables with no computed data behind them (§9).
 
 ### 5.3 Supporting and multi-regime tables (optional)
 
@@ -310,7 +339,7 @@ All §6 commands use the committed learned-risk checkpoint so that the RT-PreQEC
 --calibration     checkpoints/risk_lstm_v2_smoke_30_calibration.json
 ```
 
-### 6.1 Main regime (d = 7) — produces the data behind Figures 3 & 4 and Tables I & II
+### 6.1 Main regime (d = 7) — produces the data behind Figures 5 & 6, `t1.png`, and Figure 9
 
 ```bash
 python scripts/run_paper_experiment_suite.py \
@@ -327,8 +356,8 @@ python scripts/run_paper_experiment_suite.py \
 `results/runs/paper_suite_d7_rtqec_ai_selected/`:
 
 ```text
-main/summary_metrics.csv        ← the 13-mode table → Figure 3, Tables I & II
-main/<mode>/events.csv          ← per-job traces    → Figure 4 (CDF)
+main/summary_metrics.csv        ← the 13-mode table → Figure 5, t1.png, Figure 9
+main/<mode>/events.csv          ← per-job traces    → Figure 6 (CDF)
 main/records.csv                ← the shared 4 000-shot batch + per-shot records
 main/metrics.json               ← eval protocol + flags (real_qec, timing_mode, …)
 suite_manifest.json             ← seeds, software_versions, git commit hash
@@ -349,7 +378,7 @@ python scripts/run_paper_experiment_suite.py \
 **~10 minutes** (570 s measured; PyMatching at d=11 is much slower). Feeds the d=11
 rows of `regime_summary_table.csv` and the §6 scaling discussion.
 
-### 6.3 Burst regime (d = 7, p = 0.005, overload) — produces Figure 5
+### 6.3 Burst regime (d = 7, p = 0.005, overload) — produces Figure 7
 
 ```bash
 python scripts/run_paper_experiment_suite.py \
@@ -361,14 +390,14 @@ python scripts/run_paper_experiment_suite.py \
     --out    results/runs/paper_suite_burst_rtqec_ai
 ```
 
-**~1.5 minutes** (78 s). `main/<mode>/events.csv` feeds Figure 5. For the two-worker
+**~1.5 minutes** (78 s). `main/<mode>/events.csv` feeds Figure 7. For the two-worker
 sensitivity point, rerun with `configs/real_stream_eval_burst_2w.yaml` and
 `--out results/runs/paper_suite_burst_2w_rtqec_ai`, then build the capacity table as
 in §5.3.
 
-### 6.4 Decoupled threshold sweep — produces Figure 6
+### 6.4 Decoupled threshold sweep — produces Figure 8
 
-The paper's Figure 6 decouples the *predecode* shaping threshold from the *scheduler*
+The paper's Figure 8 decouples the *predecode* shaping threshold from the *scheduler*
 fast-commit threshold. Run it by enabling the sweep on the main d=7 config and
 narrowing the predecode/confidence grids to the selected point:
 
@@ -386,13 +415,13 @@ python scripts/run_paper_experiment_suite.py \
     --out             results/runs/paper_suite_d7_rtqec_ai_decoupled
 ```
 
-**~9 minutes** (546 s). Writes `threshold_sweep.csv` at the run root — the Figure 6
+**~9 minutes** (546 s). Writes `threshold_sweep.csv` at the run root — the Figure 8
 source — plus 14 per-point directories under `threshold_sweep/` named
 `<mode>_pre_<p>_sched_<s>_conf_<c>` (2 modes × 7 scheduler thresholds 0.10–0.50).
 **Verified:** this exact command reproduces the published 14-row grid in
 `table/figure_data/threshold_sweep/threshold_sweep.csv`.
 
-> Do **not** use `scripts/evaluate_threshold_sweep.py` for Figure 6 — that older
+> Do **not** use `scripts/evaluate_threshold_sweep.py` for Figure 8 — that older
 > script *couples* the two thresholds into one knob, whereas the paper's sweep is
 > decoupled and is produced only by the suite command above.
 
@@ -404,7 +433,7 @@ Every suite invocation produces this layout under its `--out` directory:
 <out>/
 ├── main/                            # the single-regime evaluation over all modes
 │   ├── records.csv                  # the shared syndrome batch + per-shot records
-│   ├── summary_metrics.csv          # per-mode aggregate metrics  → tables, Figure 3
+│   ├── summary_metrics.csv          # per-mode aggregate metrics  → Figure 5, t1.png, Figure 9
 │   ├── frontend_contract_table.csv  # front-end accept / abstain / false-accept
 │   ├── setting_summary.csv          # per-setting / per-noise breakdown
 │   ├── metrics.json                 # eval protocol, split hashes, real_qec flag
@@ -412,21 +441,21 @@ Every suite invocation produces this layout under its `--out` directory:
 │   ├── pareto_summary.csv
 │   ├── predictions.npz
 │   └── <mode>/                      # one dir per mode
-│       ├── events.csv               # per-job trace  → Figures 4, 5
+│       ├── events.csv               # per-job trace  → Figures 6, 7
 │       ├── decisions.csv
 │       └── predictions.csv
 ├── suite_manifest.json              # config, seeds, software versions, git hash
-├── threshold_sweep.csv              # (only with --threshold-sweep) → Figure 6
+├── threshold_sweep.csv              # (only with --threshold-sweep) → Figure 8
 └── threshold_sweep/<mode>_pre_.._sched_.._conf_../   # one dir per sweep point
 ```
 
 ---
 
-## 7. Reproducing the component-overhead table (Table III)
+## 7. Reproducing the component-overhead table (`tab:overhead`)
 
-Table III is an isolated microbenchmark of each runtime component, **not** a trace
-product. The published numbers used **2 000 shots with 100 warm-up** (1 900 measured),
-single thread, Windows 10, no CPU pinning:
+The paper's only computed table is an isolated microbenchmark of each runtime
+component, **not** a trace product. The published numbers used **2 000 shots with
+100 warm-up** (1 900 measured), single thread, Windows 10, no CPU pinning:
 
 ```bash
 python scripts/measure_rtss_overheads.py \
@@ -440,7 +469,7 @@ python scripts/measure_rtss_overheads.py \
 
 ```text
 results/runs/wcet_overheads_d7/
-├── overhead_summary.csv       ← == Table III  (committed copy: table/rtss_overhead_table.csv)
+├── overhead_summary.csv       ← == tab:overhead  (committed copy: table/rtss_overhead_table.csv)
 ├── overhead_trace.csv         ← per-shot raw timing trace
 └── measurement_protocol.json  ← shot counts, platform, timing mode (== table/rtss_overhead_measurement_protocol.json)
 ```
@@ -472,10 +501,18 @@ PYTHONPATH=../code:../code/src python tools/export_rtss_paper_figures.py \
     --out              RTSS/6a131841608c92582d0fcb7c/figure
 ```
 
-It writes `figure3.pdf … figure6.pdf`. By default it passes `--skip-diagrams`:
-**`figure1.pdf` and `figure2.pdf` were redrawn by hand** after generation, so the
-exporter leaves them alone unless you pass `--include-diagrams` (which would
-overwrite the polished versions with the rougher generated ones).
+> **Numbering caveat.** The exporter predates the current draft: it writes the four
+> data figures under the *old* submission numbering — `figure3.pdf` (pareto),
+> `figure4.pdf` (CDF), `figure5.pdf` (burst), `figure6.pdf` (sweep). In the current
+> paper those same plots are **`figure5.pdf`, `figure6.pdf`, `figure7.pdf`, and
+> `figure8.pdf`** respectively, so rename when copying into the paper's `figure/`
+> directory. By default the exporter passes `--skip-diagrams`: the four schematics
+> (**figures 1–4** in the current draft) were redrawn by hand, so the exporter
+> leaves them alone unless you pass `--include-diagrams`. The two newest data
+> figures — **`t1.png`** (fig:main) and **`figure9.pdf`** (fig:ablation-delta) —
+> have no committed plotting script; they were rendered from
+> `table/rtss_main_table.csv` and `table/rtss_ablation_delta_vs_rt_qec.csv`, which
+> §5.2 regenerates byte-identically (see §9).
 
 To point it at the committed data instead of a fresh run, substitute
 `--run-dir ../code/table/figure_data/d7_main`, `--burst-run-dir
@@ -487,59 +524,44 @@ the submission's figures were produced.
 
 ## 9. Paper reference — figures and tables
 
-These are the artifacts as published. Each is reproducible from `table/figure_data/`
-(§5) or re-runnable from scratch (§6). The PNGs shown below live in `docs/assets/`
-(rendered from `figure/*.pdf` with `pdftoppm -png -r 160`).
+These are the artifacts as published (Overleaf revision `58f61e6`). Each data figure
+is reproducible from `table/figure_data/` (§5) or re-runnable from scratch (§6). The
+PNGs shown below live in `docs/assets/` (rendered from `figure/*.pdf` with
+`pdftoppm -png -r 150`).
 
-### Figure 3 — Main operating-point comparison (d = 7, §6.1)
+### Figure 5 — Main operating-point comparison (`fig:pareto`, d = 7, §5)
 
 Logical error rate against lag violation, p99 response, and boundary-commit success.
 RT-PreQEC sits between the accurate-only and fast-only endpoints: far lower LER than
 the timing-first baselines, much lower tail latency than accurate-only. Oracle modes
 are non-deployable upper bounds.
 
-![Figure 3 — main operating-point comparison](docs/assets/figure3.png)
+![Figure 5 — main operating-point comparison](docs/assets/figure5.png)
 
 - **Script:** `make_rtss_plots.py` → `main_pareto_frontier.png` (§5.1); PDF via §8.
 - **Data:** `table/figure_data/d7_main/summary_metrics.csv`.
 - **Re-run:** §6.1.
 
-### Figure 4 — Response-time CDF (d = 7, §6.2)
+### Figure 6 — Response-time CDF (`fig:cdf`, d = 7, §5)
 
 Per-job response-time CDF. The timing gain comes from selectively removing
 high-latency accurate decodes from the tail rather than uniformly accelerating all
 jobs.
 
-![Figure 4 — response-time CDF](docs/assets/figure4.png)
+![Figure 6 — response-time CDF](docs/assets/figure6.png)
 
 - **Script:** `make_rtss_plots.py` → `response_time_cdf_by_mode.png` (§5.1); PDF via §8.
 - **Data:** `table/figure_data/d7_main/<mode>/events.csv`.
 - **Re-run:** §6.1.
 
-### Figure 5 — Burst regime: lag and response over time (§6.3)
+### `t1.png` — Main results (`fig:main`, d = 7, §6)
 
-Pauli-frame lag and response time through the burst overload window. The dashed line
-is the burst deadline; the oracle front-end quantifies the headroom.
+The paper's headline results are a **figure**, not a table: four panels over the
+evaluated configurations — logical error rate, deadline misses, Pauli-frame lag, and
+boundary commit with front-end accept. The underlying values are exactly
+`table/rtss_main_table.csv` (produced byte-identically by §5.2).
 
-![Figure 5 — burst lag and response trace](docs/assets/figure5.png)
-
-- **Script:** `make_rtss_plots.py` → `burst_lag_backlog_trace.png` (§5.1); PDF via §8.
-- **Data:** `table/figure_data/burst/<mode>/events.csv`.
-- **Re-run:** §6.3.
-
-### Figure 6 — Decoupled threshold sweep (d = 7 validation split, §7.5)
-
-Sweeping the scheduler risk threshold with the predecode shaping threshold fixed at
-0.35. The two thresholds are separate knobs; the learned-risk RT-PreQEC is the safer
-operating point. The dotted vertical line marks the selected threshold 0.30.
-
-![Figure 6 — decoupled threshold sweep](docs/assets/figure6.png)
-
-- **Script:** `make_rtss_plots.py` → `threshold_sweep_lag_frontier.png` (§5.1); PDF via §8.
-- **Data:** `table/figure_data/threshold_sweep/threshold_sweep.csv`.
-- **Re-run:** §6.4.
-
-### Table I — Main results (`tab:main`, d = 7, §6.6)
+![Main results — LER, deadline misses, lag, boundary](docs/assets/t1.png)
 
 | Mode | LER (%) | p99 Resp (µs) | DL Miss (%) | p99 Lag | Lag Viol (%) | Boundary (%) | Fast Sel (%) | Accept (%) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -550,26 +572,56 @@ operating point. The dotted vertical line marks the selected threshold 0.30.
 | Oracle front-end | 0.03  | 13.2  | 0.00  | 1  | 0.00  | 100.0 | 74.55 | 100.0 |
 | Oracle risk      | 0.03  | 142.9 | 3.90  | 10 | 2.88  | 97.6  | 74.55 | 0.0   |
 
-- **Script:** `export_rtss_tables.py` → `rtss_main_table.csv` (§5.2).
-- **Data:** `table/figure_data/d7_main/summary_metrics.csv` · **Re-run:** §6.1.
+- **Data:** `table/rtss_main_table.csv` ← `table/figure_data/d7_main/summary_metrics.csv` (§5.2).
+- **Re-run:** §6.1. The published `t1.png` rendering itself has no committed plotting
+  script — the CSV is the source of truth.
 
-### Table II — Ablation impact vs. RT-PreQEC (`tab:ablation-delta`, §7)
+### Figure 7 — Burst regime: lag and response over time (`fig:burst`, §7)
 
-Positive ΔLER means higher error; negative ΔDL Miss means fewer misses.
+Pauli-frame lag and response time through the burst overload window. The dashed line
+is the burst deadline; the oracle front-end quantifies the headroom.
+
+![Figure 7 — burst lag and response trace](docs/assets/figure7.png)
+
+- **Script:** `make_rtss_plots.py` → `burst_lag_backlog_trace.png` (§5.1); PDF via §8.
+- **Data:** `table/figure_data/burst/<mode>/events.csv`.
+- **Re-run:** §6.3.
+
+### Figure 8 — Decoupled threshold sweep (`fig:sweep`, d = 7 validation split, §7)
+
+Sweeping the scheduler risk threshold with the predecode shaping threshold fixed at
+0.35. The two thresholds are separate knobs; the learned-risk RT-PreQEC is the safer
+operating point. The dotted vertical line marks the selected threshold 0.30.
+
+![Figure 8 — decoupled threshold sweep](docs/assets/figure8.png)
+
+- **Script:** `make_rtss_plots.py` → `threshold_sweep_lag_frontier.png` (§5.1); PDF via §8.
+- **Data:** `table/figure_data/threshold_sweep/threshold_sweep.csv`.
+- **Re-run:** §6.4.
+
+### Figure 9 — Ablation impact vs. RT-PreQEC (`fig:ablation-delta`, §8)
+
+Per-ablation deltas relative to RT-PreQEC at the selected d=7 operating point.
+Positive ΔLER means higher error; negative ΔDL Miss means fewer misses. The
+underlying values are exactly `table/rtss_ablation_delta_vs_rt_qec.csv` (produced
+byte-identically by §5.2).
+
+![Figure 9 — ablation impact vs. RT-PreQEC](docs/assets/figure9.png)
 
 | Ablation | ΔLER (pp) | ΔDL Miss (pp) | ΔLag Viol (pp) |
 |---|---:|---:|---:|
 | No validation (A1)  | +4.98 | −6.65 | −3.03 |
 | No abstention (A2)  | +1.20 | −2.78 | −1.05 |
 | No scheduler (A3)   | +0.90 | +0.10 | +1.68 |
-| Heuristic runtime   | +1.08 | −1.75 | −0.75 |
+| Heuristic certified | +1.08 | −1.75 | −0.75 |
 | Front-end only      | −0.30 | +3.83 | +3.28 |
 | EDF baseline        | +0.48 | −7.55 | −2.30 |
 
-- **Script:** `export_rtss_tables.py` → `rtss_ablation_delta_vs_rt_qec.csv` (§5.2).
-- **Data:** `table/figure_data/d7_main/summary_metrics.csv` · **Re-run:** §6.1.
+- **Data:** `table/rtss_ablation_delta_vs_rt_qec.csv` ← `table/figure_data/d7_main/summary_metrics.csv` (§5.2).
+- **Re-run:** §6.1. Like `t1.png`, the published rendering has no committed plotting
+  script — the CSV is the source of truth.
 
-### Table III — Per-component overhead (`tab:overhead`, §7.7)
+### `tab:overhead` — Per-component overhead (§7)
 
 Isolated microbenchmark, 1 900 measured shots, single thread, Windows 10, no pinning.
 
@@ -585,24 +637,41 @@ Isolated microbenchmark, 1 900 measured shots, single thread, Windows 10, no pin
 - **Committed copy:** `table/rtss_overhead_table.csv` · protocol in
   `table/rtss_overhead_measurement_protocol.json`.
 
-### Multi-regime summary (`regime_summary_table.csv`, §6.2–§6.3)
+### `tab:regimes` and `tab:modes` — hand-written tables (§3, §5)
+
+The paper's remaining two tables have **no computed data behind them**; they
+declare the evaluation setup:
+
+- **`tab:regimes` (§3) — Evaluation regimes.** Main: d=7, 7 rounds, T=6 µs,
+  deadline 48 µs, primary Pareto. Scaling: d=11, 11 rounds, T=10 µs, deadline
+  40 µs, scheduler value. Burst: d=7, 7 rounds, T=7 µs, deadline 28 µs, overload
+  stress. These parameters are exactly the configs listed in §10.2; the measured
+  per-regime metrics live in `regime_summary_table.csv` below.
+- **`tab:modes` (§5) — Evaluated configurations and their roles.** The 11 named
+  configurations (endpoints, baselines, ablations, oracles) — mapped to
+  implementation mode keys in §10.1.
+
+### Multi-regime summary (`regime_summary_table.csv`, §6 discussion)
+
+Not a paper table — the measured numbers behind the §6 scaling and burst
+discussion:
 
 | Regime | Mode | LER (%) | p99 Resp (µs) | Lag Viol (%) | Boundary (%) | Fast Sel (%) |
 |---|---|---:|---:|---:|---:|---:|
 | **d=7**   | Accurate-only | 0.03  | 435.4   | 14.75 | 81.0  | 0.00  |
 |           | Fast-only     | 18.15 | 4.8     | 0.00  | 100.0 | 100.0 |
 |           | EDF           | 0.80  | 46.8    | 1.13  | 100.0 | 4.23  |
-|           | Heuristic runtime | 1.40 | 95.8   | 2.68  | 97.6  | 16.75 |
+|           | Heuristic certified | 1.40 | 95.8   | 2.68  | 97.6  | 16.75 |
 |           | **RT-PreQEC** | 0.33  | 102.4   | 3.43  | 95.2  | 5.20  |
 | **d=11**  | Accurate-only | 0.00  | 11 781.9 | 78.43 | 4.8  | 0.00  |
 |           | Fast-only     | 33.03 | 14.6    | 0.48  | 100.0 | 100.0 |
 |           | EDF           | 10.80 | 39.6    | 0.00  | 100.0 | 32.05 |
-|           | Heuristic runtime | 5.73 | 4 570.3 | 44.58 | 28.6 | 19.45 |
+|           | Heuristic certified | 5.73 | 4 570.3 | 44.58 | 28.6 | 19.45 |
 |           | **RT-PreQEC** | 4.43  | 4 576.0 | 47.05 | 21.4  | 14.53 |
 | **burst** | Accurate-only | 0.28  | 471.7   | 24.45 | 28.6  | 0.00  |
 |           | Fast-only     | 24.93 | 22.1    | 0.55  | 97.6  | 100.0 |
 |           | EDF           | 5.65  | 27.9    | 0.38  | 97.6  | 19.93 |
-|           | Heuristic runtime | 0.70 | 313.3  | 16.33 | 42.9  | 3.45  |
+|           | Heuristic certified | 0.70 | 313.3  | 16.33 | 42.9  | 3.45  |
 |           | **RT-PreQEC** | 0.55  | 313.3   | 16.33 | 42.9  | 1.75  |
 
 - **Script:** `summarize_rtss_results.py` (§5.3) · **Re-run:** §6.1–§6.3.
@@ -624,7 +693,7 @@ authoritative (`scripts/export_rtss_tables.py:MODE_LABELS`):
 | Fast-only | `fast_only` | endpoint |
 | EDF | `edf` | timing-first baseline |
 | **RT-PreQEC** | **`rt_qec_ai`** | main method (learned risk) |
-| Heuristic runtime / certified | **`rt_qec`** | ablation (heuristic risk) |
+| Heuristic certified | **`rt_qec`** | ablation (rule-based risk) |
 | Front-end only | `heuristic_pre_fixed` | ablation |
 | Rule risk | `risk_heuristic` | ablation |
 | Learned risk only | `ai_risk` | ablation |
@@ -637,7 +706,7 @@ authoritative (`scripts/export_rtss_tables.py:MODE_LABELS`):
 Two mappings are genuinely non-obvious and worth memorizing:
 
 - The paper's **RT-PreQEC** row is mode **`rt_qec_ai`** (learned risk).
-- The paper's **"Heuristic runtime"** ablation row is mode **`rt_qec`** (heuristic risk).
+- The paper's **"Heuristic certified"** ablation row is mode **`rt_qec`** (heuristic risk).
 
 The `--include-ai` flag is what inserts `ai_risk` and `rt_qec_ai` into the run's mode
 list; without it you get 11 modes and **no RT-PreQEC row** in the tables.
@@ -657,9 +726,9 @@ The three regimes are three config files. Shared: rotated surface code, memory-X
 ### 10.3 Selected d = 7 operating point
 
 Per `configs/real_stream_eval_main_ai_selected.yaml` (the config behind the main
-table): front-end confidence threshold **0.50**, predecoder risk threshold **0.35**,
-scheduler risk threshold **0.30**, max cluster size **6**. The predecode and
-scheduler thresholds are deliberately decoupled — more jobs may receive residual
+results): front-end confidence threshold **0.50**, predecoder risk threshold
+**0.35**, scheduler risk threshold **0.30**, max cluster size **6**. The predecode
+and scheduler thresholds are deliberately decoupled — more jobs may receive residual
 pruning, but only strongly certified low-risk jobs may commit through the fast
 backend.
 
@@ -679,18 +748,19 @@ Read this before treating a fresh §6 run as "the paper numbers."
   (accurate-only, oracle, RT-PreQEC) shift visibly between runs. Timing metrics also
   vary with the machine.
 - **Consequence:** the **committed `table/figure_data/` is the authoritative source
-  for the exact published numbers.** §5 reproduces figures 3–6 and Tables I–II
-  exactly (tables byte-identical; figures 3 and 6 byte-identical PDFs). Treat a §6
-  re-run as "does the pipeline run and produce sane, in-family numbers," not as a
-  bit-exact reproduction. Making the sampler deterministic would require threading a
-  seed through `compile_detector_sampler(seed=...)`.
+  for the exact published numbers.** §5 reproduces the data behind figures 5–8 and
+  the CSVs behind `t1.png`/figure 9 exactly (table CSVs byte-identical; the pareto
+  and sweep PDFs byte-identical). Treat a §6 re-run as "does the pipeline run and
+  produce sane, in-family numbers," not as a bit-exact reproduction. Making the
+  sampler deterministic would require threading a seed through
+  `compile_detector_sampler(seed=...)`.
 - **Software versions are recorded, not pinned.** Each run writes
   `software_versions` into `suite_manifest.json`. The published set was Python
   3.10.20 / numpy 2.2.6 / pandas 2.3.3 / torch 2.10.0 / stim 1.16.0 / pymatching
-  2.4.0 / matplotlib 3.10.9. Figure 4 and 5 PDFs differ from the submission only by a
-  sub-point canvas width from a newer matplotlib — the data is identical.
+  2.4.0 / matplotlib 3.10.9. The CDF and burst PDFs differ from the submission only
+  by a sub-point canvas width from a newer matplotlib — the data is identical.
 - **Component overheads are empirical timing, not WCET.** They move with CPU and
-  load; Table III reports the reference-machine microbenchmark.
+  load; `tab:overhead` reports the reference-machine microbenchmark.
 - **Paired-shot protocol.** Within one run, all modes decode the *same* sampled
   shots, so differences between modes reflect routing/scheduling, not noise
   realization. The non-determinism above is *across* runs, not within one.
