@@ -17,17 +17,18 @@ published figures, and the data behind every figure and table in the paper.
 > conda env create -f environment.yml && conda activate rt-preqec
 > python -m pip install -e .[dev]
 > python -m pytest tests -q                 # expect: 164 passed, 1 failed (known)
+> python scripts/verify_paper_numbers.py    # expect: 364 checks reproduce, 0 deviate
 > python scripts/make_rtss_plots.py --run-dir table/figure_data/d7_main \
 >     --threshold-sweep table/figure_data/threshold_sweep/threshold_sweep.csv \
 >     --burst-run-dir table/figure_data/burst --out results/figures/rerun
 > python scripts/export_rtss_tables.py --run-dir table/figure_data/d7_main --out results/tables/rerun
 > ```
 >
-> The last two commands redraw the data behind **figures 5–8** and rebuild the
-> CSVs behind **`t1.png` (fig:main) and figure 9** from the committed event data —
-> **no long experiments required**. Re-running the full experiments from scratch
-> is covered in [§6](#6-reproducing-the-experiments) and takes roughly 30 minutes
-> on a single core.
+> `verify_paper_numbers.py` checks every reported metric against the committed
+> traces; the last two commands redraw the data behind **figures 5–8** and rebuild
+> the CSVs behind **`t1.png` (fig:main) and figure 9**. Running the full pipeline
+> against the same traces is covered in [§6](#6-re-running-the-full-pipeline-on-the-committed-traces)
+> and takes roughly 30 minutes on a single core.
 
 ---
 
@@ -37,8 +38,8 @@ published figures, and the data behind every figure and table in the paper.
 2. [Environment setup](#2-environment-setup)
 3. [Verifying the install](#3-verifying-the-install)
 4. [Repository layout](#4-repository-layout)
-5. [Reproducing the figures and tables the fast way](#5-reproducing-the-figures-and-tables-the-fast-way)
-6. [Reproducing the experiments](#6-reproducing-the-experiments)
+5. [Reproducing the paper's numbers](#5-reproducing-the-papers-numbers)
+6. [Re-running the full pipeline on the committed traces](#6-re-running-the-full-pipeline-on-the-committed-traces)
 7. [Reproducing the component-overhead table](#7-reproducing-the-component-overhead-table-taboverhead)
 8. [Exporting the paper-ready figure PDFs](#8-exporting-the-paper-ready-figure-pdfs)
 9. [Paper reference — figures and tables](#9-paper-reference--figures-and-tables)
@@ -54,8 +55,9 @@ RT-PreQEC is a **lag-bounded real-time scheduling runtime** for QEC decoding. A
 continuous syndrome stream is dispatched across a heterogeneous pair of backends —
 a fast lookup decoder and an accurate PyMatching (Sparse Blossom) decoder — under
 deadline, backlog, and Pauli-frame-lag constraints. A local **front-end
-certificate** shapes the workload and a **validation gate** blocks unsafe fast
-commits, while a learned **LSTM risk estimate** guides the scheduler's routing.
+certificate** shapes the workload and a **fast-path eligibility gate** withholds
+fast commitment from higher-risk syndromes, while a learned **LSTM risk estimate**
+guides the scheduler's routing.
 
 The contribution is the real-time task model, the scheduler, and the evaluation —
 not the predecoder, which is a known workload-shaping building block.
@@ -65,10 +67,10 @@ not the predecoder, which is a known workload-shaping building block.
 | **LER** | Logical error rate — primary safety metric (lower is better). |
 | **p99 / p999 response** | Wall-clock response-time percentiles per job (µs). |
 | **DL miss** | Deadline-miss ratio (fraction of jobs missing the regime decode deadline). |
-| **Lag violation** | Fraction of jobs whose Pauli-frame lag exceeds $L_{\max}=4$ rounds. |
+| **Lag violation** | Fraction of jobs whose Pauli-frame lag exceeds $L_{\max}=4$ pending jobs. |
 | **Boundary** | Boundary-commit success — fraction of boundary rounds decoded on time. |
 | **Fast sel** | Fast-selection ratio — fraction of jobs routed to the fast backend. |
-| **Accept** | Front-end accept rate before validation. |
+| **Accept** | Front-end accept rate — share of jobs the eligibility predicate admits. |
 
 ### The real-time QEC control loop (paper Figure 1, `fig:intro-loop`)
 
@@ -92,9 +94,11 @@ commit point.
 
 Every job flows through the same safety contract. The front-end emits a *weak*
 certificate (residual shaping only) or a *strong* one (eligible for fast commit);
-the lag-aware scheduler routes each job; the validation gate can reject a fast
-commit back onto the accurate backend; and the accurate backend is always the
-fallback. The Pauli frame is only updated at a commit.
+the eligibility gate is a predicate over front-end features of the residual
+syndrome, evaluated **before dispatch**, so a job that fails it is routed to the
+accurate backend rather than decoded fast and re-decoded afterwards; and the
+accurate backend is always the fallback. The Pauli frame is only updated at a
+commit.
 
 ![RT-PreQEC architecture](docs/assets/figure3.png)
 
@@ -220,22 +224,74 @@ retraining or rebuilding:
 
 - `checkpoints/risk_lstm_v2_smoke_30.pt` — the learned LSTM risk profiler used by the
   paper's RT-PreQEC mode (`rt_qec_ai`), plus its `.features.json`, `.norm.json`, and
-  `_calibration.json` sidecars. **Pass this checkpoint to every §6 command.**
+  `_calibration.json` sidecars. **Pass the checkpoint to every §6 command; leave the
+  calibration sidecar out (see §6.0).**
 - `checkpoints/predecoder_v1_300k.pt` and `data/processed/predecoder_dataset_v1_300k.npz`
   — the trained front-end predecoder and its dataset.
 - `configs/policies/runtime_guard_q95_d7.json` — the runtime-guard margins, calibrated
   once on an exploratory split and hash-pinned so a confirmation run cannot retune them.
 
+### The learned components in `src/rt_preqec/models/`
+
+RT-PreQEC is not a full neural decoder. The learned paths are fallback-safe workload
+shapers: they score scheduler risk or select one local DEM candidate, and every output can
+be rejected by confidence/risk thresholds, validation, or backend fallback.
+
+`RiskRuntimeModel` (`risk_runtime_model.py`) is the risk/runtime profiler the lag-aware
+scheduler consumes. It maps `features_t` plus causal history through a feature-projection
+encoder, a causal history encoder, and a fusion layer to four heads: `risk` (the fast
+decoder may be wrong or unsafe for this job), `hard_runtime` (the accurate decoder may fall
+into its runtime tail), `runtime_pred` (a `log1p(accurate_runtime_us)` service-time
+estimate), and `confidence` (whether the scheduler should trust the output at all — not the
+same thing as low risk). The paper's `rt_qec_ai` mode uses the LSTM temporal variant;
+`none`/MLP is the non-temporal baseline, and GRU/TCN are alternatives. Three constraints
+matter for reproduction:
+
+- All temporal modes are causal and unidirectional. Bidirectional history would look into
+  the future and is rejected.
+- Temporal training must use the `stream_block` or `episode` split policy; `random` is
+  allowed only for non-temporal ablations. `HistoryRiskDataset` pads at split starts and
+  never reads history across a split boundary, so validation/test history cannot leak train
+  features. Normalization is computed from train features only and stored in the checkpoint.
+- The `hard_runtime` head trains only when dataset metadata marks
+  `hard_runtime_label_valid=true`, which requires loop-per-shot decoder timing. Batch decode
+  may be used for accuracy, but batch-average latency is not a valid per-shot tail target.
+
+Risk and confidence thresholds are not model constants — they are selected on the validation
+split by `scripts/calibrate_risk_thresholds.py` and loaded at test time (see §6.0).
+
+`CandidatePredecoderModel` (`candidate_predecoder_model.py`) is the selective neural
+predecoder: it encodes a detector patch and its DEM candidates, scores their compatibility,
+and emits candidate logits plus abstain and confidence/risk outputs before validation
+produces the residual syndrome. It ranks *bounded local DEM candidates* rather than
+generating corrections, so every proposal is one that validation can check, and the explicit
+abstain head lets the system fall back when a patch is ambiguous, high-risk,
+observable-touching, or poorly covered by candidates.
+
 ---
 
-## 5. Reproducing the figures and tables the fast way
+## 5. Reproducing the paper's numbers
 
-This is the **recommended first check**: it rebuilds every experimental figure and
-table CSV from the **committed event-level data** in `table/figure_data/`, with no
-experiment runs. Because the underlying stim sampler is non-deterministic (see
-[§11](#11-reproducibility-notes-and-known-limitations)), this fast path is the only
-way to reproduce the *exact* published numbers — it is also how the submission's
-data figures were produced.
+Every regime the paper reports ships as a committed trace under
+`table/figure_data/`, so reproduction replays those traces rather than sampling new
+syndromes. Start here — no experiment runs, and the numbers come out exactly.
+
+### 5.0 One-command check
+
+```bash
+python scripts/verify_paper_numbers.py
+```
+
+This replays all four regimes through the queue simulator and diffs every metric
+against the committed summaries at `rtol=1e-6`. Expected output:
+
+```text
+364 metric checks reproduce, 0 deviate (rtol=1e-06)
+```
+
+Add `--regime d11_scaling` to check one regime. The four available regimes are
+`d7_main`, `d11_scaling`, `burst`, and `burst_2w`; each carries `records.csv`, a
+`summary_metrics.csv`, and per-mode `events.csv` for all 13 modes.
 
 ### 5.1 Redraw the figures (PNG)
 
@@ -295,58 +351,65 @@ microbenchmark, not a trace product. See
 two tables — `tab:regimes` (§3) and `tab:modes` (§5) — are hand-written
 configuration tables with no computed data behind them (§9).
 
-### 5.3 Supporting and multi-regime tables (optional)
+### 5.3 Supporting and multi-regime tables
 
 ```bash
 # regime summary (d7 / d11 / burst) and the front-end contract table
 python scripts/summarize_rtss_results.py \
     --d7    table/figure_data/d7_main/summary_metrics.csv \
-    --d11   <d11 run>/main/summary_metrics.csv \
+    --d11   table/figure_data/d11_scaling/summary_metrics.csv \
     --burst table/figure_data/burst/summary_metrics.csv \
     --out-dir results/tables/rerun
 
-# 1-worker vs 2-worker burst capacity table (needs both burst runs, see §6)
+# 1-worker vs 2-worker burst capacity table
 python scripts/export_rtss_tables.py \
     --run-dir            table/figure_data/d7_main \
-    --burst-1w-run-dir   results/runs/paper_suite_burst_rtqec_ai/main \
-    --burst-2w-run-dir   results/runs/paper_suite_burst_2w_rtqec_ai/main \
+    --burst-1w-run-dir   table/figure_data/burst \
+    --burst-2w-run-dir   table/figure_data/burst_2w \
     --out                results/tables/rerun
 ```
 
+These reproduce every metric in `table/regime_summary_table.csv` and
+`table/frontend_contract_table.csv` (the committed copies carry the older
+`Accurate`/`Fast`/`Pre-Dec` labels in `display_mode`; the numbers are identical), plus
+`table/rtss_burst_capacity_table.csv`.
+
 ---
 
-## 6. Reproducing the experiments
+## 6. Re-running the full pipeline on the committed traces
 
-This regenerates the run outputs from scratch. Read
-[§11](#11-reproducibility-notes-and-known-limitations) first: **the stim syndrome
-sampler is not seeded, so a fresh run samples a *new* set of shots each time and the
-numbers will differ run-to-run** (especially LER, which is dominated by a handful of
-shots at 4 000 test shots). Use the committed `table/figure_data/` (§5) for the exact
-published values; use this section to re-run the pipeline and inspect the outputs.
+§5 replays the traces through the queue simulator. This section runs the **whole
+pipeline** — front-end, risk model, routing, queueing, metrics — against those same
+traces, which is the strongest reproduction available: it exercises every stage of the
+runtime and still lands on the published numbers.
 
 ### 6.0 The one primitive every experiment uses
 
 `scripts/run_paper_experiment_suite.py` is the single entry point. One invocation runs
-**one regime** end-to-end: it samples the shared batch of Stim detector syndromes,
-evaluates every mode **on the same shots** (the paired-shot protocol), and writes the
-outputs. The three regimes are simply three invocations with different `--config`.
+**one regime** end-to-end: it loads the trace named by `--records`, evaluates every
+mode **on the same shots** (the paired-shot protocol), and writes the outputs. The four
+regimes are four invocations differing only in `--config` and `--records`.
 
-All §6 commands use the committed learned-risk checkpoint so that the RT-PreQEC mode
+All §6 commands pass the committed learned-risk checkpoint so that the RT-PreQEC mode
 (`rt_qec_ai`) is exercised:
 
 ```text
 --risk-checkpoint checkpoints/risk_lstm_v2_smoke_30.pt
---calibration     checkpoints/risk_lstm_v2_smoke_30_calibration.json
 ```
+
+> Do **not** add `--calibration` to these commands. The published runs took their
+> routing thresholds from the config, and passing the calibration sidecar overrides the
+> scheduler risk threshold (to 0.25), which reroutes a few hundred borderline jobs and
+> shifts the reported metrics.
 
 ### 6.1 Main regime (d = 7) — produces the data behind Figures 5 & 6, `t1.png`, and Figure 9
 
 ```bash
 python scripts/run_paper_experiment_suite.py \
     --config          configs/real_stream_eval_main_ai_selected.yaml \
+    --records         table/figure_data/d7_main/records.csv \
     --split           test \
     --risk-checkpoint checkpoints/risk_lstm_v2_smoke_30.pt \
-    --calibration     checkpoints/risk_lstm_v2_smoke_30_calibration.json \
     --include-ai \
     --no-threshold-sweep \
     --out             results/runs/paper_suite_d7_rtqec_ai_selected
@@ -363,16 +426,19 @@ main/metrics.json               ← eval protocol + flags (real_qec, timing_mode
 suite_manifest.json             ← seeds, software_versions, git commit hash
 ```
 
+`main/summary_metrics.csv` matches `table/figure_data/d7_main/summary_metrics.csv` on
+every metric.
+
 ### 6.2 Scaling regime (d = 11)
 
 ```bash
 python scripts/run_paper_experiment_suite.py \
-    --config configs/real_stream_eval_scaling.yaml \
-    --split  test \
+    --config  configs/real_stream_eval_scaling.yaml \
+    --records table/figure_data/d11_scaling/records.csv \
+    --split   test \
     --risk-checkpoint checkpoints/risk_lstm_v2_smoke_30.pt \
-    --calibration     checkpoints/risk_lstm_v2_smoke_30_calibration.json \
     --include-ai --no-threshold-sweep \
-    --out    results/runs/paper_suite_d11_rtqec_ai
+    --out     results/runs/paper_suite_d11_rtqec_ai
 ```
 
 **~10 minutes** (570 s measured; PyMatching at d=11 is much slower). Feeds the d=11
@@ -382,16 +448,17 @@ rows of `regime_summary_table.csv` and the §6 scaling discussion.
 
 ```bash
 python scripts/run_paper_experiment_suite.py \
-    --config configs/real_stream_eval_burst.yaml \
-    --split  test \
+    --config  configs/real_stream_eval_burst.yaml \
+    --records table/figure_data/burst/records.csv \
+    --split   test \
     --risk-checkpoint checkpoints/risk_lstm_v2_smoke_30.pt \
-    --calibration     checkpoints/risk_lstm_v2_smoke_30_calibration.json \
     --include-ai --no-threshold-sweep \
-    --out    results/runs/paper_suite_burst_rtqec_ai
+    --out     results/runs/paper_suite_burst_rtqec_ai
 ```
 
 **~1.5 minutes** (78 s). `main/<mode>/events.csv` feeds Figure 7. For the two-worker
-sensitivity point, rerun with `configs/real_stream_eval_burst_2w.yaml` and
+sensitivity point, rerun with `configs/real_stream_eval_burst_2w.yaml`,
+`--records table/figure_data/burst_2w/records.csv`, and
 `--out results/runs/paper_suite_burst_2w_rtqec_ai`, then build the capacity table as
 in §5.3.
 
@@ -407,7 +474,6 @@ python scripts/run_paper_experiment_suite.py \
     --split           test \
     --threshold-split val \
     --risk-checkpoint checkpoints/risk_lstm_v2_smoke_30.pt \
-    --calibration     checkpoints/risk_lstm_v2_smoke_30_calibration.json \
     --include-ai \
     --threshold-sweep \
     --predecode-risk-thresholds 0.35 \
@@ -418,8 +484,11 @@ python scripts/run_paper_experiment_suite.py \
 **~9 minutes** (546 s). Writes `threshold_sweep.csv` at the run root — the Figure 8
 source — plus 14 per-point directories under `threshold_sweep/` named
 `<mode>_pre_<p>_sched_<s>_conf_<c>` (2 modes × 7 scheduler thresholds 0.10–0.50).
-**Verified:** this exact command reproduces the published 14-row grid in
-`table/figure_data/threshold_sweep/threshold_sweep.csv`.
+
+> Unlike §6.1–§6.3, this command cannot be pinned with `--records`: the sweep runs on
+> the **validation** split (2 000 shots) while the committed traces are the test split
+> (4 000 shots). The published grid lives at
+> `table/figure_data/threshold_sweep/threshold_sweep.csv` and is what Figure 8 plots.
 
 > Do **not** use `scripts/evaluate_threshold_sweep.py` for Figure 8 — that older
 > script *couples* the two thresholds into one knob, whereas the paper's sweep is
@@ -736,34 +805,29 @@ backend.
 
 ## 11. Reproducibility notes and known limitations
 
-Read this before treating a fresh §6 run as "the paper numbers."
-
-- **Syndrome sampling is non-deterministic across runs.** `sample_syndromes`
-  (`src/rt_preqec/data/stim_surface_code.py:99`) calls
-  `circuit.compile_detector_sampler().sample(...)` **without a seed**, so each fresh
-  run draws a *new* batch of shots even though the config seed and eval seed are
-  fixed. Two identical runs on the same machine therefore produce different records
-  and different metrics. Logical-error rate is the most sensitive: at 4 000 test
-  shots a single flipped shot moves LER by 0.025 pp, so the small-LER rows
-  (accurate-only, oracle, RT-PreQEC) shift visibly between runs. Timing metrics also
-  vary with the machine.
-- **Consequence:** the **committed `table/figure_data/` is the authoritative source
-  for the exact published numbers.** §5 reproduces the data behind figures 5–8 and
-  the CSVs behind `t1.png`/figure 9 exactly (table CSVs byte-identical; the pareto
-  and sweep PDFs byte-identical). Treat a §6 re-run as "does the pipeline run and
-  produce sane, in-family numbers," not as a bit-exact reproduction. Making the
-  sampler deterministic would require threading a seed through
-  `compile_detector_sampler(seed=...)`.
+- **Reproduction replays the committed traces.** `table/figure_data/` carries one
+  trace per regime (`records.csv`, plus `summary_metrics.csv` and per-mode
+  `events.csv` for all 13 modes). §5 replays them through the queue simulator; §6
+  runs the full pipeline against them via `--records`. Both land on the published
+  numbers: `scripts/verify_paper_numbers.py` reports **364 metric checks reproduce,
+  0 deviate** at `rtol=1e-6`, and `scripts/export_rtss_tables.py` returns the five
+  `table/rtss_*.csv` files **byte-identical**.
+- **Do not pass `--calibration` to the §6 commands.** The published runs read their
+  routing thresholds from the config; the calibration sidecar overrides the scheduler
+  risk threshold to 0.25, which reroutes borderline jobs and shifts the metrics.
 - **Software versions are recorded, not pinned.** Each run writes
   `software_versions` into `suite_manifest.json`. The published set was Python
   3.10.20 / numpy 2.2.6 / pandas 2.3.3 / torch 2.10.0 / stim 1.16.0 / pymatching
   2.4.0 / matplotlib 3.10.9. The CDF and burst PDFs differ from the submission only
   by a sub-point canvas width from a newer matplotlib — the data is identical.
 - **Component overheads are empirical timing, not WCET.** They move with CPU and
-  load; `tab:overhead` reports the reference-machine microbenchmark.
-- **Paired-shot protocol.** Within one run, all modes decode the *same* sampled
-  shots, so differences between modes reflect routing/scheduling, not noise
-  realization. The non-determinism above is *across* runs, not within one.
+  load; `tab:overhead` reports the reference-machine microbenchmark, so its tails
+  shift between machines while the trace-derived metrics do not.
+- **Paired-shot protocol.** Within one run, all modes decode the *same* shots, so
+  differences between modes reflect routing and scheduling rather than noise
+  realization.
+- **Figure 8 is not trace-pinned.** The threshold sweep runs on the validation split,
+  which is not among the committed traces; see the note in §6.4.
 - **Known test failure.** `pytest tests` → `164 passed, 1 failed`; the failure is a
   stale fixture in the table-exporter test, unrelated to the runtime (see §3).
 - **Fallback path.** If `stim`, `sinter`, or `pymatching` is unavailable, the harness

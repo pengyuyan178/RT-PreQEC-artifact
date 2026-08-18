@@ -264,8 +264,8 @@ data/external/*
 
 # The paper's own figures, and the data behind every figure and table in it.
 # Without these negations the blanket *.pdf / *.csv rules above would silently
-# drop the whole of figure/ and table/ -- see figure/README.md for the mapping
-# from each file to the paper element it feeds.
+# drop the whole of figure/ and table/ -- see section 9 of README.md for the
+# mapping from each file to the paper element it feeds.
 !figure/*.pdf
 !figure/*.png
 !table/**/*.csv

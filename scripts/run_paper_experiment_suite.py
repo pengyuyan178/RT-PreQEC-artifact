@@ -183,6 +183,12 @@ PAPER_SCHEDULER_RISK_THRESHOLDS = "0.10,0.15,0.25,0.30,0.35,0.40,0.50"
 def main(
     config: str = "configs/real_stream_eval.yaml",
     risk_dataset: str | None = typer.Option(None, "--risk-dataset"),
+    records: str | None = typer.Option(
+        None,
+        "--records",
+        help="Replay a saved records.csv instead of sampling fresh syndromes. This is "
+        "what reproduces the published numbers exactly.",
+    ),
     split: str = typer.Option("test", "--split"),
     threshold_split: str = typer.Option("val", "--threshold-split"),
     risk_checkpoint: str = typer.Option("none", "--risk-checkpoint"),
@@ -212,6 +218,7 @@ def main(
     """Run baselines, focused ablations, and optional Pareto threshold sweep."""
     base_cfg = load_config(config)
     run_root = Path(out)
+    replay_records = _load_records_csv(Path(records)) if records is not None else None
     main_modes = [
         "accurate_only",
         "fast_only",
@@ -242,13 +249,16 @@ def main(
             risk_dataset_path=risk_dataset,
             split=split,
             calibration_path=calibration,
+            preloaded_records=replay_records,
         )
 
     sweep_rows: list[dict[str, object]] = []
     if run_threshold_sweep:
-        main_records: list[RealStreamShotRecord] | None = None
+        main_records: list[RealStreamShotRecord] | None = replay_records
         main_records_path = run_root / "main" / "records.csv"
-        if main_records_path.exists() and str(threshold_split).lower() == str(split).lower():
+        if main_records is not None:
+            pass
+        elif main_records_path.exists() and str(threshold_split).lower() == str(split).lower():
             main_records = _load_records_csv(main_records_path)
         elif risk_dataset is None:
             threshold_records_path = run_root / f"_threshold_{str(threshold_split).lower()}_records" / "records.csv"
@@ -308,6 +318,7 @@ def main(
                         risk_dataset_path=risk_dataset,
                         split=threshold_split,
                         calibration_path=calibration,
+                        preloaded_records=replay_records,
                     )
                     summary = dict(payload.get("summary", [{}])[0])
             sweep_rows.append(

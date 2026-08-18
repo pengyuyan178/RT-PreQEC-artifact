@@ -2134,15 +2134,33 @@ def run_real_stream_eval(
     calibration_path: str | Path | None = None,
     train_seed: int | None = None,
     eval_seed: int | None = None,
+    preloaded_records: list[RealStreamShotRecord] | None = None,
 ) -> dict[str, Any]:
-    """Run paired real-stream evaluation across configured modes."""
-    eval_source = "risk_dataset" if risk_dataset_path is not None else "generated"
+    """Run paired real-stream evaluation across configured modes.
+
+    ``preloaded_records`` supplies an already-loaded trace instead of drawing a fresh
+    batch of syndromes, so every mode is evaluated against exactly the shots that trace
+    carries.
+    """
+    if preloaded_records is not None:
+        eval_source = "records_csv"
+    elif risk_dataset_path is not None:
+        eval_source = "risk_dataset"
+    else:
+        eval_source = "generated"
     config = copy.deepcopy(config)
-    if eval_source == "risk_dataset":
+    if eval_source == "records_csv":
+        # Match the seed the original run evaluated under, so that any seeded runtime
+        # context (burst shaping) reproduces alongside the replayed records.
+        config.seed = int(eval_seed if eval_seed is not None else config.data_protocol.eval_seed)
+        split_info: dict[str, Any] = {}
+        test_records = sorted(preloaded_records, key=lambda record: record.shot_id)
+        metadata: dict[str, Any] = {"num_records": len(test_records)}
+    elif eval_source == "risk_dataset":
         records, metadata = load_real_stream_records_from_risk_dataset(
             risk_dataset_path, split=split
         )
-        split_info: dict[str, Any] = {
+        split_info = {
             "train_indices": metadata.get("splits", {}).get("train_indices", []),
             "val_indices": metadata.get("splits", {}).get("val_indices", []),
             "test_indices": metadata.get("splits", {}).get("test_indices", []),
