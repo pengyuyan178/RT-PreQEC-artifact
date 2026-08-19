@@ -2,6 +2,9 @@
 
 **RT-PreQEC: Lag-Bounded Real-Time Scheduling for Quantum Error Correction** (RTSS 2026).
 
+> **Artifact Evaluation:** see **[ARTIFACT.md](ARTIFACT.md)** for the RTSS 2026 AE
+> instructions (requirements, quick test, per-figure/table reproduction, full run).
+
 This repository is the self-contained reproduction artifact. It holds the runtime,
 the evaluation harness, every committed run input, the trained models, the published
 figures, and the data behind every figure and table in the paper. Nothing here
