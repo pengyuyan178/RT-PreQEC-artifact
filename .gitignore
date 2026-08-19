@@ -232,6 +232,10 @@ results/*
 # .gitkeep survives; re-ignore its contents so a reviewer's rerun is not staged.
 results/runs/*
 !results/runs/.gitkeep
+# Re-rendered figure/table outputs from the reproduction commands are regenerable;
+# ignore those rerun dirs but keep the committed reference figures/tables tracked.
+results/figures/rerun/
+results/figures/rerun_test/
 checkpoints/*
 !checkpoints/.gitkeep
 data/raw/*

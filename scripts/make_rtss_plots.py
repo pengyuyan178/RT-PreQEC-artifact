@@ -1,4 +1,4 @@
-﻿"""Generate RTSS-focused figures from real-stream evaluation outputs."""
+"""Generate RTSS-focused figures from real-stream evaluation outputs."""
 
 from __future__ import annotations
 
@@ -719,8 +719,20 @@ def main(
     out: str = typer.Option("results/figures/paper_rtss_v2", "--out"),
     threshold_sweep: str | None = typer.Option(None, "--threshold-sweep"),
     burst_run_dir: str | None = typer.Option(None, "--burst-run-dir"),
+    format: str = typer.Option(
+        "png", "--format", help="Output format: 'png', 'pdf' (paper-ready), or 'both'."
+    ),
+    include_diagrams: bool = typer.Option(
+        False,
+        "--include-diagrams/--skip-diagrams",
+        help="Also render the generator schematics (lag-model / architecture). "
+        "Skipped by default: paper figures 1-4 are hand-drawn, not generated here.",
+    ),
 ) -> None:
-    """Render Pauli-frame-lag, response-tail, and boundary-commit figures."""
+    """Render the paper's data figures (Fig. 5-8) from committed traces or a fresh run.
+
+    All outputs are written under ``--out`` as PNG by default; pass ``--format pdf``
+    for the paper-ready PDFs (self-contained, no external paper repo needed)."""
     run_path = Path(run_dir)
     out_path = Path(out)
     summary_path = run_path / "summary_metrics.csv"
@@ -732,50 +744,78 @@ def main(
     cdf_modes = _ordered_available_modes(summary, CDF_PLOT_MODES)
     main_summary = summary[summary["mode"].astype(str).isin(main_modes)].copy() if main_modes else summary
 
-    _plot_lag_model_diagram(out_path / "lag_model_task_flow.png")
-    _plot_architecture_diagram(out_path / "rt_qec_architecture.png")
+    fmt = format.lower()
+    if fmt not in {"png", "pdf", "both"}:
+        raise typer.BadParameter(f"--format must be png|pdf|both, got {format!r}")
+    exts = ["png", "pdf"] if fmt == "both" else [fmt]
 
-    _plot_main_pareto_frontier(main_summary, out_path / "main_pareto_frontier.png")
-    _annotated_scatter(
-        main_summary,
-        "pauli_frame_lag_violation_ratio",
-        "logical_error_rate",
-        "Pauli-frame lag violation ratio",
-        "Logical error rate",
-        out_path / "logical_error_rate_vs_pauli_frame_lag_violation.png",
-    )
-    _annotated_scatter(
-        main_summary,
-        "p99_response_time_us",
-        "logical_error_rate",
-        "p99 response time (us)",
-        "Logical error rate",
-        out_path / "logical_error_rate_vs_p99_response_time.png",
-    )
-    _annotated_scatter(
-        main_summary,
-        "logical_error_rate",
-        "boundary_commit_success_rate",
-        "Logical error rate",
-        "Boundary commit success rate",
-        out_path / "boundary_commit_success_vs_logical_error.png",
-    )
-    _plot_lag_over_time(run_path, main_modes or modes, out_path / "pauli_frame_lag_over_time_by_mode.png")
-    _plot_response_time_cdf(run_path, cdf_modes or main_modes or modes, out_path / "response_time_cdf_by_mode.png")
+    def emit(stem: str, render) -> None:
+        for ext in exts:
+            render(out_path / f"{stem}.{ext}")
 
+    if include_diagrams:
+        emit("lag_model_task_flow", _plot_lag_model_diagram)
+        emit("rt_qec_architecture", _plot_architecture_diagram)
+
+    # Figure 5 (fig:pareto) and its three single-panel variants.
+    emit("main_pareto_frontier", lambda p: _plot_main_pareto_frontier(main_summary, p))
+    emit(
+        "logical_error_rate_vs_pauli_frame_lag_violation",
+        lambda p: _annotated_scatter(
+            main_summary,
+            "pauli_frame_lag_violation_ratio",
+            "logical_error_rate",
+            "Pauli-frame lag violation ratio",
+            "Logical error rate",
+            p,
+        ),
+    )
+    emit(
+        "logical_error_rate_vs_p99_response_time",
+        lambda p: _annotated_scatter(
+            main_summary,
+            "p99_response_time_us",
+            "logical_error_rate",
+            "p99 response time (us)",
+            "Logical error rate",
+            p,
+        ),
+    )
+    emit(
+        "boundary_commit_success_vs_logical_error",
+        lambda p: _annotated_scatter(
+            main_summary,
+            "logical_error_rate",
+            "boundary_commit_success_rate",
+            "Logical error rate",
+            "Boundary commit success rate",
+            p,
+        ),
+    )
+    emit(
+        "pauli_frame_lag_over_time_by_mode",
+        lambda p: _plot_lag_over_time(run_path, main_modes or modes, p),
+    )
+    # Figure 6 (fig:cdf).
+    emit(
+        "response_time_cdf_by_mode",
+        lambda p: _plot_response_time_cdf(run_path, cdf_modes or main_modes or modes, p),
+    )
+
+    # Figure 8 (fig:sweep).
     sweep_path = Path(threshold_sweep) if threshold_sweep else run_path.parent / "threshold_sweep.csv"
-    _plot_threshold_frontier(sweep_path, out_path / "threshold_sweep_lag_frontier.png")
+    emit("threshold_sweep_lag_frontier", lambda p: _plot_threshold_frontier(sweep_path, p))
 
+    # Figure 7 (fig:burst).
     if burst_run_dir is not None:
         burst_run_path = Path(burst_run_dir)
         burst_summary_path = burst_run_path / "summary_metrics.csv"
         if burst_summary_path.exists():
             burst_summary = pd.read_csv(burst_summary_path)
             burst_modes = burst_summary["mode"].astype(str).tolist() if "mode" in burst_summary else []
-            _plot_burst_lag_backlog_trace(
-                burst_run_path,
-                burst_modes,
-                out_path / "burst_lag_backlog_trace.png",
+            emit(
+                "burst_lag_backlog_trace",
+                lambda p: _plot_burst_lag_backlog_trace(burst_run_path, burst_modes, p),
             )
 
 
